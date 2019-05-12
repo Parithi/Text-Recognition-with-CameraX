@@ -23,7 +23,13 @@ import android.provider.MediaStore
 import java.net.URI
 import android.R.attr.orientation
 import android.R.attr.bitmap
+import android.widget.ImageView
 import androidx.exifinterface.media.ExifInterface
+import android.view.animation.Animation
+import android.view.animation.LinearInterpolator
+import android.view.animation.AlphaAnimation
+import com.google.firebase.ml.vision.FirebaseVision
+import com.google.firebase.ml.vision.common.FirebaseVisionImage
 
 
 private const val REQUEST_CODE_PERMISSIONS = 10
@@ -55,8 +61,23 @@ class MainActivity : AppCompatActivity() {
         initializeCameraConfig()
         bindCameraX()
         capture_button.setOnClickListener {
-            takePicture()
+            if(isImageCaptured){
+                resetCamera()
+            } else {
+                analysed_text.text = getString(R.string.please_wait)
+                capture_button.text = getString(R.string.capturing)
+                takePicture()
+                isImageCaptured = true
+            }
         }
+    }
+
+    private fun resetCamera() {
+        capture_button.text = getString(R.string.capture)
+        captured_image.setImageBitmap(null)
+        analysed_text.text = getString(R.string.capture_message)
+        analysed_text.setTextIsSelectable(false)
+        isImageCaptured = false
     }
 
     private fun initializePreview() {
@@ -97,14 +118,14 @@ class MainActivity : AppCompatActivity() {
         imageCapture.takePicture(file, object : ImageCapture.OnImageSavedListener {
             override fun onError(error: ImageCapture.UseCaseError, message: String, exc: Throwable?) {
                 val msg = "Photo capture failed: $message"
-                Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+//                Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                 Log.e("CameraXApp", msg)
                 exc?.printStackTrace()
             }
 
             override fun onImageSaved(file: File) {
                 val msg = "Photo capture succeeded: ${file.absolutePath}"
-                Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+//                Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                 showImageOnView(file.path)
                 file.delete()
             }
@@ -118,6 +139,30 @@ class MainActivity : AppCompatActivity() {
         val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, uri)
         val rotatedBitmap = rotateBitmap(bitmap, orientation)
         captured_image.setImageBitmap(rotatedBitmap)
+        processImage(rotatedBitmap)
+    }
+
+    private fun processImage(bitmap : Bitmap?) {
+        analysed_text.text = getString(R.string.processing)
+        capture_button.text = getString(R.string.reset)
+        bitmap?.let {
+            val image = FirebaseVisionImage.fromBitmap(bitmap)
+            val detector = FirebaseVision.getInstance().onDeviceTextRecognizer
+            detector.processImage(image).addOnSuccessListener { firebaseVisionText ->
+                val analysedText = firebaseVisionText.text
+                if(!analysedText.isNullOrBlank()) {
+                    analysed_text.text = analysedText
+                    analysed_text.setTextIsSelectable(true)
+                } else {
+                    resetCamera()
+                    Toast.makeText(baseContext, "No characters found", Toast.LENGTH_SHORT).show()
+                }
+            }
+                .addOnFailureListener {
+                    Toast.makeText(baseContext, "No characters found", Toast.LENGTH_SHORT).show()
+                    it.printStackTrace()
+                }
+        }
     }
 
     private fun rotateBitmap(bitmap: Bitmap, orientation: Int): Bitmap? {
@@ -148,6 +193,7 @@ class MainActivity : AppCompatActivity() {
 
             return bmRotated
         } catch (e: OutOfMemoryError) {
+            Toast.makeText(baseContext, "Unable to load image", Toast.LENGTH_SHORT).show()
             e.printStackTrace()
             return null
         }
@@ -190,5 +236,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return true
+    }
+
+    override fun onBackPressed() {
+        if(isImageCaptured){
+            resetCamera()
+        } else {
+            super.onBackPressed()
+        }
     }
 }

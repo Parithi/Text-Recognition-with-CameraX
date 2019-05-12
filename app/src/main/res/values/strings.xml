@@ -2,4 +2,8 @@
     <string name="app_name">AppliedML - TextReco</string>
     <string name="capture">Capture</string>
     <string name="capture_message">Click capture to get started</string>
+    <string name="processing">Processing..</string>
+    <string name="reset">Reset</string>
+    <string name="capturing">Capturing..</string>
+    <string name="please_wait">⏳</string>
 </resources>

@@ -4,8 +4,11 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Size
 import android.graphics.Matrix
+import android.net.Uri
 import android.util.Log
 import android.util.Rational
 import android.view.Surface
@@ -16,6 +19,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
+import android.provider.MediaStore
+import java.net.URI
+import android.R.attr.orientation
+import android.R.attr.bitmap
+import androidx.exifinterface.media.ExifInterface
+
 
 private const val REQUEST_CODE_PERMISSIONS = 10
 private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
@@ -96,9 +105,53 @@ class MainActivity : AppCompatActivity() {
             override fun onImageSaved(file: File) {
                 val msg = "Photo capture succeeded: ${file.absolutePath}"
                 Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
-                Log.d("CameraXApp", msg)
+                showImageOnView(file.path)
+                file.delete()
             }
         })
+    }
+
+    private fun showImageOnView(path : String) {
+        val uri = Uri.fromFile(File(path))
+        val exifInterface = ExifInterface(uri.path!!)
+        val orientation = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED)
+        val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, uri)
+        val rotatedBitmap = rotateBitmap(bitmap, orientation)
+        captured_image.setImageBitmap(rotatedBitmap)
+    }
+
+    private fun rotateBitmap(bitmap: Bitmap, orientation: Int): Bitmap? {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_NORMAL -> return bitmap
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+                matrix.setRotate(180f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.setRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.setRotate(-90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(-90f)
+            else -> return bitmap
+        }
+        try {
+            val bmRotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            bitmap.recycle()
+
+            return bmRotated
+        } catch (e: OutOfMemoryError) {
+            e.printStackTrace()
+            return null
+        }
+
     }
 
     private fun updateTransform() {
